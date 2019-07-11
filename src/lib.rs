@@ -1,7 +1,7 @@
 #![recursion_limit="256"]
 #![feature(async_await)]
 use hyper::Client;
-use uuid::Uuid;
+
 use chrono::{NaiveDateTime, DateTime, Utc};
 use futures::future;
 use hyper::StatusCode;
@@ -28,15 +28,15 @@ impl futures01::future::Executor<Box<dyn futures01::Future<Item = (), Error = ()
 
 
 // Based on https://gist.github.com/jomo/be7dbb5228187edbb993
-pub async fn created_date<T: Connect + Sync + 'static>(client: &mut Client<T>, name: String) -> Result<DateTime<Utc>, Box<std::error::Error + Send>> {
+pub async fn created_date<T: Connect + Sync + 'static>(client: &mut Client<T>, name: String) -> Result<DateTime<Utc>, Box<dyn std::error::Error + Send>> {
     let mut start = 1263146630; // notch sign-up;
     let mut end = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
 
     let check = |name, time| {
         println!("Checking: {:?}", time);
-        let boxed: Box<dyn Send + Future<Output = Result<Response<Body>, Box<std::error::Error + Send>>>> = Box::new(client
+        let boxed: Box<dyn Send + Future<Output = Result<Response<Body>, Box<dyn std::error::Error + Send>>>> = Box::new(client
             .get(format!("https://api.mojang.com/users/profiles/minecraft/{}?at={}", name, time).parse().unwrap())
-            .compat().map(|r| r.map_err(|e| Box::new(e) as Box<std::error::Error + Send>)));
+            .compat().map(|r| r.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)));
         Pin::from(boxed)
     };
 
