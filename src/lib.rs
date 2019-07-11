@@ -11,6 +11,9 @@ use futures::compat::Future01CompatExt;
 use futures::select;
 use std::pin::Pin;
 
+use hyper_tls::HttpsConnector;
+
+
 use hyper::Response;
 use hyper::Body;
 
@@ -24,6 +27,13 @@ impl futures01::future::Executor<Box<dyn futures01::Future<Item = (), Error = ()
         tokio::spawn(future.compat().map(|r| r.unwrap()));
         Ok(())
     }
+}
+
+pub async fn simple_created_date(name: String) ->  Result<DateTime<Utc>, Box<dyn std::error::Error + Send>>  {
+    let https = HttpsConnector::new(4).unwrap();
+    // TODO: re-enable keep-alive when Hyper is using std-futures tokio
+    let mut client = Client::builder().keep_alive(false).executor(ExecutorCompat).build::<_, hyper::Body>(https);
+    Ok(created_date(&mut client, name).await?)
 }
 
 
