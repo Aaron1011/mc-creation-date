@@ -7,10 +7,12 @@ use futures::future;
 use hyper::StatusCode;
 use futures::future::FutureExt;
 use hyper::client::connect::Connect;
+use hyper::client::HttpConnector;
 use futures::compat::Future01CompatExt;
 use futures::select;
 use std::pin::Pin;
 
+use hyper::client::Builder;
 use hyper_tls::HttpsConnector;
 
 
@@ -30,10 +32,17 @@ impl futures01::future::Executor<Box<dyn futures01::Future<Item = (), Error = ()
     }
 }
 
-pub async fn simple_created_date(name: String) ->  Result<DateTime<Utc>, Error>  {
+pub fn make_https() -> (Builder, HttpsConnector<HttpConnector>) {
     let https = HttpsConnector::new(4).unwrap();
     // TODO: re-enable keep-alive when Hyper is using std-futures tokio
-    let mut client = Client::builder().keep_alive(false).executor(ExecutorCompat).build::<_, hyper::Body>(https);
+    let mut builder = Client::builder();
+    builder.keep_alive(false).executor(ExecutorCompat);
+    (builder, https)
+}
+
+pub async fn simple_created_date(name: String) ->  Result<DateTime<Utc>, Error>  {
+    let (builder, https) = make_https();
+    let mut client = builder.build(https);
     Ok(created_date(&mut client, name).await?)
 }
 
