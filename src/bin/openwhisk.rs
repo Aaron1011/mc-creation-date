@@ -10,13 +10,16 @@ use failure::Error;
 use tokio::runtime::Runtime;
 
 use rusoto_s3::S3Client;
-use rusoto_s3::PutObjectRequest;
+use rusoto_s3::{PutObjectRequest, GetObjectRequest, GetObjectError};
 use rusoto_s3::S3;
 use rusoto_credential::StaticProvider;
+use rusoto_core::RusotoError;
 use rusoto_core::Region;
 use rusoto_core::request::HttpClient;
 
-use futures::compat::Future01CompatExt;
+use futures::stream::{StreamExt, Stream};
+
+use futures::compat::{Stream01CompatExt, Future01CompatExt};
 
 use mc_creation_date::{make_https, simple_created_date};
 
@@ -53,7 +56,7 @@ enum MyError {
     MissingJSON
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Response {
 	date: DateTime<Utc> 
 }
@@ -65,7 +68,7 @@ fn main_inner() -> Result<Response, Error>  {
         let rt = Runtime::new().unwrap();
 
         let ibm_region = Region::Custom {
-            name: "my-region".to_string(),
+            name: "us-south".to_string(),
             endpoint: request.cos_endpoint.to_string()
         };
 
@@ -79,19 +82,39 @@ fn main_inner() -> Result<Response, Error>  {
         let http_client = HttpClient::from_builder(builder, https);
         let s3 = S3Client::new_with(http_client, creds, ibm_region);
 
+        let key = request.name.to_string();
 
-
-        let date = rt.block_on(async move {
-            s3.put_object(PutObjectRequest {
+        let response: Result<Response, failure::Error> = rt.block_on(async move {
+            match s3.get_object(GetObjectRequest {
                 bucket: request.bucket.to_string(),
-                key: "Hi".to_string(),
-                body: Some("Hello from Rust!".to_string().into_bytes().into()),
+                key: key.clone(),
                 ..Default::default()
-            }).compat().await?;
+            }).compat().await {
+                Ok(output) => {
+                    let res: Vec<u8> = output.body.unwrap().compat().map(|b| b.unwrap().as_ref().to_owned()).concat().await;
+                    let response: Response = serde_json::from_str(&String::from_utf8(res)?)?;
+                    println!("Got cached response: {:?}", response);
+                    Ok(response)
+                },
+                Err(RusotoError::Service(GetObjectError::NoSuchKey(_))) => {
+                    let response = Response { date: simple_created_date(request.name.to_string()).await? };
+                    let encoded = serde_json::to_string(&response)?;
 
-            simple_created_date(request.name.to_string()).await
-        })?;
-        Ok(Response { date })
+                    s3.put_object(PutObjectRequest {
+                        bucket: request.bucket.to_string(),
+                        key: key.clone(),
+                        body: Some(encoded.into_bytes().into()),
+                        ..Default::default()
+                    }).compat().await?;
+
+                    println!("Saved new response: {:?}", response);
+
+                    Ok(response)
+                },
+                Err(e) => Err(e)?
+            }
+        });
+        response
     } else {
         bail!(MyError::MissingJSON)
     }
