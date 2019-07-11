@@ -18,6 +18,7 @@ use hyper::Response;
 use hyper::Body;
 
 use std::future::Future;
+use failure::Error;
 
 
 pub struct ExecutorCompat;
@@ -29,7 +30,7 @@ impl futures01::future::Executor<Box<dyn futures01::Future<Item = (), Error = ()
     }
 }
 
-pub async fn simple_created_date(name: String) ->  Result<DateTime<Utc>, Box<dyn std::error::Error + Send>>  {
+pub async fn simple_created_date(name: String) ->  Result<DateTime<Utc>, Error>  {
     let https = HttpsConnector::new(4).unwrap();
     // TODO: re-enable keep-alive when Hyper is using std-futures tokio
     let mut client = Client::builder().keep_alive(false).executor(ExecutorCompat).build::<_, hyper::Body>(https);
@@ -38,15 +39,15 @@ pub async fn simple_created_date(name: String) ->  Result<DateTime<Utc>, Box<dyn
 
 
 // Based on https://gist.github.com/jomo/be7dbb5228187edbb993
-pub async fn created_date<T: Connect + Sync + 'static>(client: &mut Client<T>, name: String) -> Result<DateTime<Utc>, Box<dyn std::error::Error + Send>> {
+pub async fn created_date<T: Connect + Sync + 'static>(client: &mut Client<T>, name: String) -> Result<DateTime<Utc>, Error> {
     let mut start = 1263146630; // notch sign-up;
     let mut end = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
 
     let check = |name, time| {
         println!("Checking: {:?}", time);
-        let boxed: Box<dyn Send + Future<Output = Result<Response<Body>, Box<dyn std::error::Error + Send>>>> = Box::new(client
+        let boxed: Box<dyn Send + Future<Output = Result<Response<Body>, Error>>> = Box::new(client
             .get(format!("https://api.mojang.com/users/profiles/minecraft/{}?at={}", name, time).parse().unwrap())
-            .compat().map(|r| r.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)));
+            .compat().map(|r| r.map_err(|e| Error::from_boxed_compat(Box::new(e) as Box<dyn std::error::Error + Send + Sync>))));
         Pin::from(boxed)
     };
 

@@ -18,5 +18,5 @@ base64-serde = "0.3.2"
 base64 = "0.10.1"
 reqwest = "0.9.18"
 env_logger = "0.6.2"
-chrono = "0.4.7"
+chrono = { version = "0.4.7", features = ["serde"] }
 failure = "0.1.5"
