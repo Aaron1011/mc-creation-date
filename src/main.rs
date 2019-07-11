@@ -10,7 +10,7 @@ use mc_creation_date::created_date;
 use mc_creation_date::ExecutorCompat;
 
 fn main() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
 
     let name = std::env::args().nth(1).unwrap_or_else(|| "Aaorn1011".to_string());
 
